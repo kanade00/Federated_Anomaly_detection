@@ -1,0 +1,9 @@
+numpy
+torch
+torchvision
+ray
+Pillow
+tensorboard
+faiss_gpu
+scikit_learn
+scikit_image
