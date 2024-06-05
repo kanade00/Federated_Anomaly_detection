@@ -100,9 +100,9 @@ def accuracy(output, target, topk=(1,)):
 def get_features(model, dataloader, max_images=10 ** 10, verbose=False):
     features, labels = [], []
     total = 0
-    
+
     model.eval()
-    
+
     for index, data in enumerate(dataloader):
         img = data[0]
         label = data[1]
@@ -119,6 +119,32 @@ def get_features(model, dataloader, max_images=10 ** 10, verbose=False):
             print(index)
 
         total += len(img)
+
+    return np.array(features), np.array(labels)
+
+
+def get_features_ssl(model, dataloader, max_images=10 ** 10, verbose=False):
+    features, labels = [], []
+    total = 0
+
+    model.eval()
+
+    for index, data in enumerate(dataloader):
+        images = data[0]
+        label = data[1].cuda()
+        images1, images2 = images[0].cuda(), images[1].cuda()
+
+        if total > max_images:
+            break
+
+        features += list(model(images1).data.cpu().numpy())
+        features += list(model(images2).data.cpu().numpy())
+        labels += list(label.data.cpu().numpy())
+
+        if verbose and not index % 50:
+            print(index)
+
+        total += len(images)
 
     return np.array(features), np.array(labels)
 
@@ -146,7 +172,7 @@ def get_neg_features(model, trainset, dataloader, shift_trans_type=None):
 
     for index, data in enumerate(dataloader):
         img = data[0]
-        index = data[4]
+        index = data[3]
 
         img = img.cuda()
         imgs = torch.cat([shift_transform(img, k) for k in range(1, num_transform)])
@@ -173,7 +199,7 @@ def get_aligned_features(model, dataloader):
     for index, data in enumerate(dataloader):
         img = data[0]
         label = data[1]
-        index = data[4]
+        index = data[3]
 
         img, label = img.cuda(), label.cuda()
 
@@ -187,6 +213,31 @@ def get_aligned_features(model, dataloader):
     labels[index_array] = labels
 
     return features, labels
+
+def get_aligned_features_ssl(model, dataloader):
+    features1, features2, labels, index_array = [], [], [], []
+
+    model.eval()
+
+    for index, data in enumerate(dataloader):
+        images = data[0]
+        label = data[1].cuda()
+        index = data[3]
+        images1, images2 = images[0].cuda(), images[1].cuda()
+
+        features1 += list(model(images1).data.cpu().numpy())
+        features2 += list(model(images2).data.cpu().numpy())
+        labels += list(label.data.cpu().numpy())
+        index_array += list(index.data.cpu().numpy())
+
+    features1 = np.array(features1)
+    features2 = np.array(features2)
+    features1[index_array] = features1
+    features2[index_array] = features2
+    labels = np.array(labels)
+    labels[index_array] = labels
+
+    return features1, features2, labels
 
 
 def baseeval(model, device, val_loader, criterion, args, epoch=0):
@@ -335,7 +386,7 @@ class ssdk_dataset(torch.utils.data.Dataset):
     def __init__(self, images, norm_layer, copies=1, s=32):
         self.images = images
 
-        # immitating transformations used at training self-supervised models 
+        # immitating transformations used at training self-supervised models
         # replace it if training models with a different data augmentation pipeline
         self.tr = transforms.Compose(
             [
